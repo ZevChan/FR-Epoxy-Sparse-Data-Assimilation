@@ -51,6 +51,8 @@ FAEFREP_Frozen_Adaptive_Evaluation_FREP/
 python data_prep.py
 ```
 
+> If you package the repository as a ZIP (rather than git), exclude `Results/`, `Graphs/`, and `data/BasicData_wo/` — they are regenerable.
+
 > The descriptor columns were computed with [alvaDesc](https://www.alvascience.com/alvadesc/) (molecular descriptors). To reproduce from raw SMILES, use the alvaDesc CLI with `--descriptors=ALL` and rename columns with the per-role suffixes (`_EP`, `_FR`, `_Curing`, `_Other_Material_1/2/3`) as in the shipped CSVs.
 
 ## Dependencies

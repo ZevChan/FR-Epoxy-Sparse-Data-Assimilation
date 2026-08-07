@@ -51,53 +51,22 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 
 
 def plot_umap():
-    umap_file = os.path.join(RESULTS_DIR, "umap_data_MASTER.csv")
+    umap_file = os.path.join(RESULTS_DIR, "Distribution", "umap_coordinates.csv")
     if not os.path.exists(umap_file):
-        print("[WARN] umap_data_MASTER.csv 不存在，请先运行 fair_holdout_comparison.py")
+        print("[WARN] umap_coordinates.csv 不存在，请先运行 fair_holdout_comparison.py")
         return
 
-    print("加载 UMAP 数据 ...")
+    print("加载 UMAP 坐标（由 distribution.py 输出）...")
     df = pd.read_csv(umap_file)
+    df = df.rename(columns={"source": "Source", "umap_1": "UMAP-1", "umap_2": "UMAP-2"})
+    df_unique = df.copy()
 
-    # 分离特征列（排除 Target, Target_Value, Source）
-    meta_cols = ["Target", "Target_Value", "Source"]
-    feature_cols = [c for c in df.columns if c not in meta_cols]
-
-    # 去重（同一行可能出现在多个 target 中）
-    df_unique = df.drop_duplicates(subset=feature_cols).copy()
-
-    n_lit = (df_unique["Source"] == "Literature").sum()
-    n_exp = (df_unique["Source"] == "Experiment").sum()
-    print(f"  文献样本: {n_lit}")
-    print(f"  实验样本: {n_exp}")
-
-    X = df_unique[feature_cols].values
     lit_mask = df_unique["Source"] == "Literature"
     exp_mask = df_unique["Source"] == "Experiment"
-
-    # ---- 只用文献数据 fit，实验数据 transform ----
-    print("执行 UMAP 降维（文献数据 fit，实验数据嵌入）...")
-    selector = VarianceThreshold()
-    X_lit_sel = selector.fit_transform(X[lit_mask])
-    X_exp_sel = selector.transform(X[exp_mask])
-
-    scaler = StandardScaler()
-    X_lit_scaled = scaler.fit_transform(X_lit_sel)
-    X_exp_scaled = scaler.transform(X_exp_sel)
-
-    reducer = umap.UMAP(
-        n_neighbors=15, min_dist=0.1, n_components=2,
-        random_state=42, verbose=False,
-    )
-    lit_embedding = reducer.fit_transform(X_lit_scaled)
-    exp_embedding = reducer.transform(X_exp_scaled)
-
-    df_unique["UMAP-1"] = np.nan
-    df_unique["UMAP-2"] = np.nan
-    df_unique.loc[lit_mask, "UMAP-1"] = lit_embedding[:, 0]
-    df_unique.loc[lit_mask, "UMAP-2"] = lit_embedding[:, 1]
-    df_unique.loc[exp_mask, "UMAP-1"] = exp_embedding[:, 0]
-    df_unique.loc[exp_mask, "UMAP-2"] = exp_embedding[:, 1]
+    n_lit = int(lit_mask.sum())
+    n_exp = int(exp_mask.sum())
+    print(f"  文献样本: {n_lit}")
+    print(f"  实验样本: {n_exp}")
 
     # ---- 主图 ----
     fig, ax = plt.subplots(figsize=(6.5, 5), dpi=600)

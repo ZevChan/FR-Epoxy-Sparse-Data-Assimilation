@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import os
+import glob
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 # ==================== NC 期刊绘图全局设置 ====================
@@ -67,12 +68,13 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 
 def plot_error_density():
     for target in REGRESSION_TARGETS:
-        pred_file = os.path.join(RESULTS_DIR, f"predictions_{target}.csv")
-        if not os.path.exists(pred_file):
-            print(f"  [WARN] 跳过 {target}: 预测文件不存在")
+        pred_files = sorted(glob.glob(
+            os.path.join(RESULTS_DIR, f"predictions_{target}_seed_*.csv")))
+        if not pred_files:
+            print(f"  [WARN] 跳过 {target}: 无 predictions_{target}_seed_*.csv")
             continue
 
-        df = pd.read_csv(pred_file)
+        df = pd.concat([pd.read_csv(f) for f in pred_files], ignore_index=True)
         y_true = df["y_true"].values
         y_pred_before = df["y_pred_before"].values
         y_pred_after = df["y_pred_after"].values
@@ -132,9 +134,10 @@ def plot_error_density():
         print(f"[OK] Error_Density_{target} 已保存 (png/pdf/svg)")
 
     # ---- UL94 二分类：混淆矩阵分布对比 ----
-    ul94_file = os.path.join(RESULTS_DIR, "predictions_UL94_Rating.csv")
-    if os.path.exists(ul94_file):
-        df = pd.read_csv(ul94_file)
+    ul94_files = sorted(glob.glob(
+        os.path.join(RESULTS_DIR, "predictions_UL94_Rating_seed_*.csv")))
+    if ul94_files:
+        df = pd.concat([pd.read_csv(f) for f in ul94_files], ignore_index=True)
         y_true = df["y_true"].values
         y_pred_before = df["y_pred_before"].values
         y_pred_after = df["y_pred_after"].values

@@ -23,7 +23,6 @@ TARGETS = ["LOI", "UL94_Rating", "THR", "TSP", "Flexural_Strength"]
 
 DISPLAY_NAMES = {
     "LOI": "LOI",
-    "pHRR": "pHRR",
     "THR": "THR",
     "TSP": "TSP",
     "Flexural_Strength": "Flexural Strength",
@@ -32,7 +31,6 @@ DISPLAY_NAMES = {
 
 UNITS = {
     "LOI": "%",
-    "pHRR": "kW/m²",
     "THR": "MJ/m²",
     "TSP": "m²",
     "Flexural_Strength": "MPa",
