@@ -122,7 +122,7 @@ def draw_panel_c(ax, data):
     rob = data["robust"]
     frozen = rob[rob["protocol"] == "frozen"].copy()
 
-    targets = ["LOI", "UL94_Rating", "pHRR", "THR", "TSP", "Flexural_Strength"]
+    targets = ["LOI", "UL94_Rating", "THR", "TSP", "Flexural_Strength"]
     x_positions = []
     all_deltas = []
     x_labels = []
@@ -173,7 +173,7 @@ def draw_panel_d(ax, data):
     rob = data["robust"]
     frozen = rob[rob["protocol"] == "frozen"].copy()
 
-    targets = ["LOI", "UL94_Rating", "pHRR", "THR", "TSP", "Flexural_Strength"]
+    targets = ["LOI", "UL94_Rating", "THR", "TSP", "Flexural_Strength"]
     medians = []
     q1s = []
     q3s = []
@@ -219,7 +219,7 @@ def draw_panel_e(ax, data):
     frozen = rob[rob["protocol"] == "frozen"]
     adaptive = rob[rob["protocol"] == "adaptive"]
 
-    targets = ["LOI", "UL94_Rating", "pHRR", "THR", "TSP", "Flexural_Strength"]
+    targets = ["LOI", "UL94_Rating", "THR", "TSP", "Flexural_Strength"]
 
     # For each target, get Frozen and Adaptive deltas
     frozen_deltas = []

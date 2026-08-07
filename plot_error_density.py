@@ -40,7 +40,7 @@ COLOR_AFTER   = "#C91511"   # 深红色 — 实验引导后
 COLOR_ZERO    = "#8C92AC"   # 冷石板灰 — 零误差参考线
 
 # 回归目标（排除 UL94，分类不适合残差密度）
-REGRESSION_TARGETS = ["LOI", "pHRR", "THR", "TSP", "Flexural_Strength"]
+REGRESSION_TARGETS = ["LOI", "THR", "TSP", "Flexural_Strength"]
 
 DISPLAY_NAMES = {
     "LOI": "LOI",

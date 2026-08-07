@@ -23,7 +23,6 @@ from knowledge_assimilation import DEFAULT_OUTPUT_DIR
 TARGET_ORDER = [
     "LOI",
     "UL94_Rating",
-    "pHRR",
     "THR",
     "TSP",
     "Flexural_Strength",

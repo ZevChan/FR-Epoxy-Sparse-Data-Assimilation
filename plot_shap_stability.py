@@ -34,7 +34,7 @@ COLOR_BEFORE = "#5DA5DA"
 COLOR_AFTER = "#C91511"
 
 DISPLAY_NAMES = {
-    "LOI": "LOI", "pHRR": "pHRR", "THR": "THR", "TSP": "TSP",
+    "LOI": "LOI", "THR": "THR", "TSP": "TSP",
     "Flexural_Strength": "Flexural Strength", "UL94_Rating": "UL-94",
 }
 

@@ -38,7 +38,7 @@ COLOR_DELTA_POS = "#2E86AB"
 COLOR_DELTA_NEG = "#A23B72"
 
 DISPLAY_NAMES = {
-    "LOI": "LOI", "pHRR": "pHRR", "THR": "THR", "TSP": "TSP",
+    "LOI": "LOI", "THR": "THR", "TSP": "TSP",
     "Flexural_Strength": "Flexural Strength", "UL94_Rating": "UL-94",
 }
 
