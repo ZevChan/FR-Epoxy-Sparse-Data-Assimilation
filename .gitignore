@@ -1,0 +1,36 @@
+# ========== Results / Graphs (regenerable, not uploaded) ==========
+Results/
+Results_*/
+Graphs/
+
+# ========== Python cache ==========
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# ========== Model files ==========
+*.pkl
+*.joblib
+
+# ========== Data regenerable by data_prep.py ==========
+data/BasicData_wo/
+
+# ========== Build / local tools ==========
+fix_paths.py
+
+# ========== IDE / OS ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========== Environment ==========
+.env
+.venv
+env/
+venv/

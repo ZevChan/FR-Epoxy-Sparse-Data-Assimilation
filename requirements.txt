@@ -1,0 +1,20 @@
+# Core
+numpy
+pandas
+scipy
+scikit-learn
+xgboost
+optuna
+shap
+matplotlib
+seaborn
+
+# Data / molecular descriptors
+rdkit
+umap-learn
+chardet
+joblib
+openpyxl
+
+# Tests
+pytest
