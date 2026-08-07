@@ -1,5 +1,5 @@
 """
-evaluation.py — 配对 bootstrap + 分类统计
+evaluation.py — Paired bootstrap + classification statistics
 ==========================================
 """
 import os
@@ -22,7 +22,7 @@ def paired_bootstrap_regression(
     n_bootstrap=N_BOOTSTRAP,
     seed=42,
 ):
-    """固定测试集上的配对 bootstrap。improvement_delta > 0 表示 After 更好。"""
+    """Paired bootstrap on the fixed test set. improvement_delta > 0 means After is better."""
     y_true = np.asarray(y_true, dtype=float)
     pred_before = np.asarray(pred_before, dtype=float)
     pred_after = np.asarray(pred_after, dtype=float)
@@ -59,7 +59,7 @@ def paired_bootstrap_regression(
 
 
 def regression_metrics_all(y_true, pred_before, pred_after, seed=42):
-    """回归指标全集：R², RMSE, MAE + bootstrap CI。"""
+    """Full regression metric set: R2, RMSE, MAE + bootstrap CI."""
     results = {}
     yt = np.asarray(y_true, dtype=float)
     pb = np.asarray(pred_before, dtype=float)
@@ -94,8 +94,8 @@ def regression_metrics_all(y_true, pred_before, pred_after, seed=42):
 
 
 def classification_statistics(y_true, pred_before, pred_after):
-    """分类指标全集：balanced accuracy, MCC, recall, McNemar。
-    pos_label=1 → V-0, pos_label=0 → Non-V-0。"""
+    """Full classification metric set: balanced accuracy, MCC, recall, McNemar.
+    pos_label=1 -> V-0, pos_label=0 -> Non-V-0."""
     yt = np.asarray(y_true, dtype=int)
     pb = np.asarray(pred_before, dtype=int)
     pa = np.asarray(pred_after, dtype=int)

@@ -72,7 +72,7 @@ def plot():
                 color=COLOR_AFTER, edgecolor="white", linewidth=0.5,
                 label="Experimental labels")
 
-    # 标注 augmentation %
+    # annotate augmentation %
     for i, (_, row) in enumerate(ss_primary.iterrows()):
         pct = row["augmentation_percent"]
         if not np.isnan(pct):
@@ -100,7 +100,7 @@ def plot():
     bars = ax.bar(x2, fs_data["delta_r2"], 0.55, color=colors,
                   edgecolor="white", linewidth=0.5)
 
-    # 数值标注
+    # numeric annotations
     for i, (_, row) in enumerate(fs_data.iterrows()):
         v = row["delta_r2"]
         ax.text(i, v + 0.003 * (1 if v >= 0 else -1),
@@ -157,7 +157,7 @@ def plot():
                     whiskerprops=dict(linewidth=0.8),
                     capprops=dict(linewidth=0.8))
 
-    # 叠加每个 seed 的点
+    # overlay per-seed points
     for i, deltas in enumerate(data_groups):
         jitter = np.random.default_rng(42).uniform(-0.12, 0.12, size=len(deltas))
         ax.scatter(np.full_like(deltas, i) + jitter, deltas,

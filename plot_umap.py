@@ -1,14 +1,15 @@
 """
 ================================================================================
- plot_umap.py — 化学空间 UMAP 投影
+ plot_umap.py — Chemical-space UMAP projection
 ================================================================================
- 直接读取 fair_holdout_comparison.py 保存的 umap_data_MASTER.csv，
- 根据 Source 列区分 Literature / Experiment，降维到 2D。
- 输出 PNG / PDF / SVG。
+ Reads the UMAP coordinates saved by distribution.py
+ (Results/Distribution/umap_coordinates.csv),
+ distinguishes Literature / Experiment by the Source column.
+ Outputs PNG / PDF / SVG.
 
- 颜色:
-   文献数据 — #5DA5DA (钢蓝色)
-   实验数据 — #C91511 (深红色，高亮)
+ Colors:
+   Literature — #5DA5DA (steel blue)
+   Experiment — #C91511 (dark red, highlighted)
 ================================================================================
 """
 
@@ -22,7 +23,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import VarianceThreshold
 import umap
 
-# ==================== NC 期刊绘图全局设置 ====================
+# ==================== NC-journal global plot settings ====================
 plt.rcParams.update({
     "font.family": "Arial",
     "font.size": 12,
@@ -39,11 +40,11 @@ plt.rcParams.update({
     "svg.fonttype": "none",
 })
 
-# ==================== 颜色定义 ====================
-COLOR_LIT = "#5DA5DA"  # 钢蓝色 — 文献数据
-COLOR_EXP = "#C91511"  # 深红色 — 实验数据高亮
+# ==================== Color definitions ====================
+COLOR_LIT = "#5DA5DA"  # steel blue — literature
+COLOR_EXP = "#C91511"  # dark red — experiment highlighted
 
-# ==================== 路径配置 ====================
+# ==================== Path configuration ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(BASE_DIR, "Results")
 SAVE_DIR = os.path.join(BASE_DIR, "Graphs")
@@ -53,10 +54,10 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 def plot_umap():
     umap_file = os.path.join(RESULTS_DIR, "Distribution", "umap_coordinates.csv")
     if not os.path.exists(umap_file):
-        print("[WARN] umap_coordinates.csv 不存在，请先运行 fair_holdout_comparison.py")
+        print("[WARN] umap_coordinates.csv not found; run fair_holdout_comparison.py first")
         return
 
-    print("加载 UMAP 坐标（由 distribution.py 输出）...")
+    print("Loading UMAP coordinates (output of distribution.py) ...")
     df = pd.read_csv(umap_file)
     df = df.rename(columns={"source": "Source", "umap_1": "UMAP-1", "umap_2": "UMAP-2"})
     df_unique = df.copy()
@@ -65,13 +66,13 @@ def plot_umap():
     exp_mask = df_unique["Source"] == "Experiment"
     n_lit = int(lit_mask.sum())
     n_exp = int(exp_mask.sum())
-    print(f"  文献样本: {n_lit}")
-    print(f"  实验样本: {n_exp}")
+    print(f"  Literature samples: {n_lit}")
+    print(f"  Experiment samples: {n_exp}")
 
-    # ---- 主图 ----
+    # ---- Main plot ----
     fig, ax = plt.subplots(figsize=(6.5, 5), dpi=600)
 
-    # KDE 背景
+    # KDE background
     sns.kdeplot(
         data=df_unique[lit_mask],
         x="UMAP-1", y="UMAP-2",
@@ -79,7 +80,7 @@ def plot_umap():
         levels=8, thresh=0.05, ax=ax,
     )
 
-    # 文献散点
+    # literature scatter
     ax.scatter(
         df_unique.loc[lit_mask, "UMAP-1"],
         df_unique.loc[lit_mask, "UMAP-2"],
@@ -87,7 +88,7 @@ def plot_umap():
         label=f"Literature Data (n={n_lit})",
     )
 
-    # 实验散点高亮
+    # experiment scatter highlighted
     ax.scatter(
         df_unique.loc[exp_mask, "UMAP-1"],
         df_unique.loc[exp_mask, "UMAP-2"],
@@ -113,7 +114,7 @@ def plot_umap():
         plt.savefig(os.path.join(SAVE_DIR, f"UMAP_Chemical_Space.{fmt}"),
                     dpi=600, bbox_inches="tight", pad_inches=0.05)
     plt.close()
-    print("[OK] UMAP_Chemical_Space 已保存 (png/pdf/svg)")
+    print("[OK] UMAP_Chemical_Space saved (png/pdf/svg)")
 
 
 if __name__ == "__main__":

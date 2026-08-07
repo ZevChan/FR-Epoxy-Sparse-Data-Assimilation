@@ -42,7 +42,7 @@ DISPLAY_NAMES = {
 def plot():
     sm = pd.read_csv(os.path.join(RESULTS_DIR, "SHAP_Stability", "shap_structure_metrics.csv"))
     
-    # Filter frozen protocol only (主分析)
+    # Filter frozen protocol only (primary analysis)
     frozen = sm[sm["protocol"] == "frozen"].copy()
     if frozen.empty:
         print("[WARN] No frozen SHAP data, try all protocols")

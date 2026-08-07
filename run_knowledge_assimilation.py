@@ -2,7 +2,7 @@
 Independent post-hoc runner for sparse experimental knowledge assimilation.
 
 Default behavior:
-（即当前仓库的 Results/Knowledge_Assimilation）
+(i.e. Results/Knowledge_Assimilation in the current repository)
   * analyzes random seed 42 only
   * never runs Optuna/HPO or Adaptive configuration selection
   * writes only to ./Results/Knowledge_Assimilation

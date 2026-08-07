@@ -1,4 +1,4 @@
-# FAEFREP — Frozen / Adaptive Evaluation for Flame-Retardant Epoxy (FREP)
+# FR-Epoxy-Sparse-Data-Assimilation — Frozen / Adaptive Evaluation for Flame-Retardant Epoxy
 
 Machine-learning-guided evaluation of **sparse experimental data value** in flame-retardant epoxy (FREP) property prediction.
 
@@ -12,7 +12,7 @@ A low-cost **knowledge-assimilation** post-processing layer (`run_knowledge_assi
 ## Project structure
 
 ```
-FAEFREP_Frozen_Adaptive_Evaluation_FREP/
+FR-Epoxy-Sparse-Data-Assimilation/
 ├── fair_holdout_comparison.py    # Core pipeline: data loading → Frozen/Adaptive evaluation
 ├── config.py                     # Shared paths, targets, seeds, HPO space, forced features
 ├── evaluation.py                 # Paired bootstrap + classification statistics (McNemar)
@@ -25,7 +25,7 @@ FAEFREP_Frozen_Adaptive_Evaluation_FREP/
 ├── plot_*.py                     # Figure scripts (paper figures, SI, UMAP, SHAP, etc.)
 ├── data/
 │   └── BasicData/                # alvaDesc descriptor matrices (WITH: literature + experiment)
-├── 实验数据.csv / 文献数据.csv    # SMILES-level experiment/literature tables (UMAP scripts input)
+├── experimental_data.csv / literature_data.csv  # SMILES-level experiment/literature tables (UMAP scripts input)
 ├── tests/                        # pytest tests for knowledge assimilation / checkpoint resume
 └── requirements.txt
 ```

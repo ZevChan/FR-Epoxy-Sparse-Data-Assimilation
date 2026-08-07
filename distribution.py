@@ -1,5 +1,5 @@
 """
-distribution.py — 无监督 UMAP + 高维 kNN 密度分析
+distribution.py — Unsupervised UMAP + high-dimensional kNN density analysis
 ====================================================
 """
 import os
@@ -15,7 +15,7 @@ from config import BASE_DIR, OUTPUT_DIR, SMILES_COLS
 
 
 def build_distribution_representation(X_all, is_literature):
-    """无监督表示：只在文献数据上拟合所有变换。"""
+    """Unsupervised representation: all transforms fitted on literature data only."""
     X_lit = X_all.loc[is_literature].copy()
     X_exp = X_all.loc[~is_literature].copy()
 
@@ -36,10 +36,10 @@ def build_distribution_representation(X_all, is_literature):
 
 
 def compute_umap_from_representation(X_lit_s, X_exp_s, n_neighbors=15, min_dist=0.1, random_state=42):
-    """从已处理的表示计算 UMAP 嵌入。先在 PCA 降维以加速。"""
+    """Compute UMAP embeddings from the processed representation. PCA pre-reduction for speed."""
     import umap
 
-    # PCA 预降维（文献数据 fit）
+    # PCA pre-reduction (fitted on literature data)
     n_pca = min(100, X_lit_s.shape[1], X_lit_s.shape[0] - 1)
     pca = PCA(n_components=n_pca, random_state=random_state)
     X_lit_repr = pca.fit_transform(X_lit_s)
@@ -59,7 +59,7 @@ def compute_umap_from_representation(X_lit_s, X_exp_s, n_neighbors=15, min_dist=
 
 
 def density_percentile(X_lit_repr, X_exp_repr, n_neighbors=10):
-    """高维 kNN 密度百分位分析。"""
+    """High-dimensional kNN density percentile analysis."""
     nn = NearestNeighbors(n_neighbors=n_neighbors + 1)
     nn.fit(X_lit_repr)
 
@@ -80,7 +80,7 @@ def density_percentile(X_lit_repr, X_exp_repr, n_neighbors=10):
 
 
 def export_distribution_data(X_all, is_literature):
-    """导出 UMAP 坐标和 kNN 密度数据。"""
+    """Export UMAP coordinates and kNN density data."""
     dist_dir = os.path.join(OUTPUT_DIR, "Distribution")
 
     X_lit_s, X_exp_s = build_distribution_representation(X_all, is_literature)
@@ -95,7 +95,7 @@ def export_distribution_data(X_all, is_literature):
     })
     umap_df.to_csv(os.path.join(dist_dir, "umap_coordinates.csv"), index=False)
 
-    # kNN 密度
+    # kNN density
     density_df = density_percentile(X_lit_s, X_exp_s)
     density_df.to_csv(os.path.join(dist_dir, "experimental_knn_density.csv"), index=False)
 

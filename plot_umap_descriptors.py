@@ -1,10 +1,10 @@
 """
 ================================================================================
- plot_umap_descriptors.py — 文献 vs 实验 UMAP（分子描述符，纯散点）
+ plot_umap_descriptors.py — Literature vs experiment UMAP (molecular descriptors, pure scatter)
 ================================================================================
- 用 RDKit 217 维 2D 分子描述符替代 Morgan 指纹，
- 对 5 个化学组分各算描述符并拼接，
- 文献数据 fit → 实验数据 transform，红色点缩小 + 半透明。
+ Uses RDKit 217-dim 2D molecular descriptors instead of Morgan fingerprints,
+ computes descriptors for each of the 5 chemical components and concatenates,
+ literature fit -> experiment transform; red points smaller and semi-transparent.
 ================================================================================
 """
 import os
@@ -22,7 +22,7 @@ import seaborn as sns
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 
-# ==================== 绘图设置 ====================
+# ==================== Plot settings ====================
 plt.rcParams.update({
     "font.family": "Arial", "font.size": 12,
     "axes.unicode_minus": False, "axes.linewidth": 0.8,
@@ -39,21 +39,21 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_DIR = os.path.join(BASE_DIR, "Graphs")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-# 5 个 SMILES 列
+# 5 SMILES columns
 SMILES_COLS = [
-    "EPOXY STRUCTURE",   # 环氧树脂
-    "Flame_retardant",   # 阻燃剂
-    "Curing_agent ",     # 固化剂
-    "Other_Material_1",  # 助剂1
-    "Other_Material_2",  # 助剂2
+    "EPOXY STRUCTURE",   # epoxy resin
+    "Flame_retardant",   # flame retardant
+    "Curing_agent ",     # curing agent
+    "Other_Material_1",  # additive 1
+    "Other_Material_2",  # additive 2
 ]
 
-# ==================== 描述符计算 ====================
-_cache = {}  # 缓存，避免重复计算相同 SMILES
+# ==================== Descriptor computation ====================
+_cache = {}  # cache to avoid recomputing identical SMILES
 
 
 def smiles_to_descriptors(smiles):
-    """把一个 SMILES 转成 217 维描述符向量，失败返 zero 向量。"""
+    """Convert a SMILES into a 217-dim descriptor vector; return a zero vector on failure."""
     if pd.isna(smiles) or not isinstance(smiles, str) or smiles.strip() == "":
         return None
     s = smiles.strip()
@@ -70,7 +70,7 @@ def smiles_to_descriptors(smiles):
 
 
 def encode_column(series):
-    """对一列 SMILES 编码，替换缺失/无效为列均值。"""
+    """Encode a column of SMILES, replacing missing/invalid entries with the column mean."""
     vecs = []
     for v in series:
         arr = smiles_to_descriptors(v)
@@ -78,12 +78,12 @@ def encode_column(series):
             vecs.append(arr)
         else:
             vecs.append(None)
-    # 找 None 的索引
+    # locate None indices
     none_idx = [i for i, x in enumerate(vecs) if x is None]
-    # 先算有效值的均值
+    # first compute the mean over valid values
     valid = [x for x in vecs if x is not None]
     if len(valid) == 0:
-        # 全缺失 → zero 向量，长度从第一个非 None 缓存推断
+        # all missing -> zero vector; length inferred from the first non-None cache entry
         sample = next((v for v in _cache.values() if v is not None), np.zeros(217))
         mean_vec = np.zeros_like(sample)
     else:
@@ -93,37 +93,37 @@ def encode_column(series):
     return np.vstack(vecs)
 
 
-# ==================== 主函数 ====================
+# ==================== Main function ====================
 def plot():
-    print("读取数据 ...")
-    exp = pd.read_csv(os.path.join(BASE_DIR, "实验数据.csv"))
-    lit = pd.read_csv(os.path.join(BASE_DIR, "文献数据.csv"))
+    print("Reading data ...")
+    exp = pd.read_csv(os.path.join(BASE_DIR, "experimental_data.csv"))
+    lit = pd.read_csv(os.path.join(BASE_DIR, "literature_data.csv"))
     if "Unnamed: 0" in exp.columns:
         exp = exp.drop(columns=["Unnamed: 0"])
 
     exp["Source"] = "Experiment"
     lit["Source"] = "Literature"
     df = pd.concat([lit, exp], ignore_index=True)
-    print(f"文献: {len(lit)}  实验: {len(exp)}  总计: {len(df)}")
+    print(f"Literature: {len(lit)}  Experiment: {len(exp)}  Total: {len(df)}")
 
-    # 每个组分算描述符，拼接
-    print("计算分子描述符 (5 组分 × 217 维) ...")
+    # compute descriptors per component and concatenate
+    print("Computing molecular descriptors (5 components x 217 dims) ...")
     all_encoded = []
     for col in SMILES_COLS:
         print(f"  -> {col}")
         all_encoded.append(encode_column(df[col]))
     X_all = np.hstack(all_encoded)
     n_desc = X_all.shape[1] // len(SMILES_COLS)
-    print(f"特征维度: {X_all.shape[1]}  ({len(SMILES_COLS)} 组分 × {n_desc} 描述符)")
+    print(f"Feature dimension: {X_all.shape[1]}  ({len(SMILES_COLS)} components x {n_desc} descriptors)")
 
-    # 清理 NaN / inf
+    # clean NaN / inf
     X_all = np.nan_to_num(X_all, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # 分离文献/实验
+    # split literature/experiment
     lit_idx = (df["Source"] == "Literature").values
     exp_idx = (df["Source"] == "Experiment").values
 
-    print("降维 (文献 fit, 实验 transform) ...")
+    print("Reducing (literature fit, experiment transform) ...")
     selector = VarianceThreshold()
     X_lit_sel = selector.fit_transform(X_all[lit_idx])
     X_exp_sel = selector.transform(X_all[exp_idx])
@@ -139,10 +139,10 @@ def plot():
     lit_emb = reducer.fit_transform(X_lit_scaled)
     exp_emb = reducer.transform(X_exp_scaled)
 
-    # ---- 绘图：文献 KDE 等高线 + 实验散点 ----
+    # ---- Plot: literature KDE contours + experiment scatter ----
     fig, ax = plt.subplots(figsize=(10, 5.5), dpi=600)
 
-    # 文献 KDE 渐变填充等高线
+    # literature KDE gradient-filled contours
     sns.kdeplot(
         x=lit_emb[:, 0], y=lit_emb[:, 1],
         fill=True, cmap="Blues", alpha=0.28,
@@ -150,12 +150,12 @@ def plot():
         label="Literature Density",
     )
 
-    # 文献散点
+    # literature scatter
     ax.scatter(lit_emb[:, 0], lit_emb[:, 1],
                c=COLOR_LIT, s=14, alpha=0.25, edgecolors="none",
                label=f"Literature (n={len(lit_emb)})")
 
-    # 实验散点
+    # experiment scatter
     ax.scatter(exp_emb[:, 0], exp_emb[:, 1],
                c=COLOR_EXP, s=90, alpha=0.75, marker="o",
                edgecolors="black", linewidth=0.6,
@@ -178,7 +178,7 @@ def plot():
         plt.savefig(os.path.join(SAVE_DIR, f"UMAP_Descriptors_Scatter.{fmt}"),
                     dpi=600, bbox_inches="tight", pad_inches=0.05)
     plt.close()
-    print("\n[OK] UMAP_Descriptors_Scatter 已保存 (png/pdf/svg)")
+    print("\n[OK] UMAP_Descriptors_Scatter saved (png/pdf/svg)")
 
 
 if __name__ == "__main__":

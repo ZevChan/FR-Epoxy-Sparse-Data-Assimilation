@@ -1,10 +1,10 @@
 """
 ================================================================================
- plot_umap_raw.py — 文献 vs 实验原始数据 UMAP 对比
+ plot_umap_raw.py — Literature vs experiment UMAP on raw data
 ================================================================================
- 直接读取 文献数据.csv 和 实验数据.csv，
- 用 Morgan 指纹编码化学结构（SMILES），结合工艺参数，
- 文献数据 fit → 实验数据 transform 到同一化学空间。
+ Reads literature_data.csv and experimental_data.csv directly,
+ encodes chemical structures (SMILES) with Morgan fingerprints, plus process parameters,
+ literature fit -> experiment transform into the same chemical space.
 ================================================================================
 """
 import os
@@ -19,7 +19,7 @@ import umap
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-# ==================== 绘图设置 ====================
+# ==================== Plot settings ====================
 plt.rcParams.update({
     "font.family": "Arial", "font.size": 12,
     "axes.unicode_minus": False, "axes.linewidth": 0.8,
@@ -36,7 +36,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_DIR = os.path.join(BASE_DIR, "Graphs")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-# ==================== Morgan 指纹 ====================
+# ==================== Morgan fingerprints ====================
 def smiles_to_fp(smiles, n_bits=256, radius=2):
     """Convert SMILES to Morgan fingerprint; return zero vector on failure."""
     if pd.isna(smiles) or not isinstance(smiles, str) or smiles.strip() == "":
@@ -56,11 +56,11 @@ def encode_smiles_column(series, n_bits=256):
     return fps
 
 
-# ==================== 主函数 ====================
+# ==================== Main function ====================
 def plot():
-    # ---- 读数据 ----
-    exp = pd.read_csv(os.path.join(BASE_DIR, "实验数据.csv"))
-    lit = pd.read_csv(os.path.join(BASE_DIR, "文献数据.csv"))
+    # ---- Read data ----
+    exp = pd.read_csv(os.path.join(BASE_DIR, "experimental_data.csv"))
+    lit = pd.read_csv(os.path.join(BASE_DIR, "literature_data.csv"))
     if "Unnamed: 0" in exp.columns:
         exp = exp.drop(columns=["Unnamed: 0"])
 
@@ -68,9 +68,9 @@ def plot():
     lit["Source"] = "Literature"
 
     df = pd.concat([lit, exp], ignore_index=True)
-    print(f"文献: {len(lit)}  实验: {len(exp)}  总计: {len(df)}")
+    print(f"Literature: {len(lit)}  Experiment: {len(exp)}  Total: {len(df)}")
 
-    # ---- 列分类 ----
+    # ---- Column classification ----
     smiles_cols = [
         "EPOXY STRUCTURE",
         "Flame_retardant",
@@ -78,7 +78,7 @@ def plot():
         "Other_Material_1",
         "Other_Material_2",
     ]
-    # Other_Material_3 几乎全空，跳过
+    # Other_Material_3 is almost entirely empty; skip
     numeric_cols = [
         "EEW",
         "Flame_retardant_AdditionAmount(wt%)",
@@ -98,26 +98,26 @@ def plot():
         "Other_Material_AdditionAmount_3 (wt%)",
     ]
 
-    # ---- 编码 SMILES → Morgan FP ----
-    print("编码 SMILES 指纹 ...")
+    # ---- Encode SMILES -> Morgan FP ----
+    print("Encoding SMILES fingerprints ...")
     fp_parts = []
     for col in smiles_cols:
         fp_parts.append(encode_smiles_column(df[col], n_bits=256))
     X_fp = np.hstack(fp_parts)  # (N, 5*256)
 
-    # ---- 数值列 ----
+    # ---- Numeric columns ----
     X_num = df[numeric_cols].apply(pd.to_numeric, errors="coerce").fillna(0).values
 
-    # ---- 合并 ----
+    # ---- Merge ----
     X_all = np.hstack([X_fp, X_num])
-    print(f"特征维度: {X_all.shape[1]}  ({X_fp.shape[1]} 指纹 + {X_num.shape[1]} 工艺)")
+    print(f"Feature dimension: {X_all.shape[1]}  ({X_fp.shape[1]} fingerprints + {X_num.shape[1]} process)")
 
-    # ---- 分离文献/实验 ----
+    # ---- Split literature/experiment ----
     lit_idx = df["Source"] == "Literature"
     exp_idx = df["Source"] == "Experiment"
 
-    # ---- fit on 文献, transform 实验 ----
-    print("降维 (文献 fit, 实验 transform) ...")
+    # ---- fit on literature, transform experiment ----
+    print("Reducing (literature fit, experiment transform) ...")
 
     selector = VarianceThreshold()
     X_lit_sel = selector.fit_transform(X_all[lit_idx])
@@ -134,24 +134,24 @@ def plot():
     lit_emb = reducer.fit_transform(X_lit_scaled)
     exp_emb = reducer.transform(X_exp_scaled)
 
-    # ---- 绘图 ----
+    # ---- Plot ----
     fig, ax = plt.subplots(figsize=(7, 5.5), dpi=600)
 
-    # KDE 背景 — 文献
+    # KDE background - literature
     sns.kdeplot(
         x=lit_emb[:, 0], y=lit_emb[:, 1],
         fill=True, alpha=0.12, color="#7f8c8d",
         levels=8, thresh=0.05, ax=ax,
     )
 
-    # 文献散点
+    # literature scatter
     ax.scatter(
         lit_emb[:, 0], lit_emb[:, 1],
         c=COLOR_LIT, s=8, alpha=0.25, edgecolors="none",
         label=f"Literature (n={len(lit_emb)})",
     )
 
-    # 实验高亮
+    # experiment highlighted
     ax.scatter(
         exp_emb[:, 0], exp_emb[:, 1],
         c=COLOR_EXP, s=70, alpha=0.95, marker="o",
@@ -168,7 +168,7 @@ def plot():
                        edgecolor="#333333", fontsize=14)
     legend.get_frame().set_linewidth(0.6)
 
-    # 四边完整边框
+    # full four-sided border
     for spine in ax.spines.values():
         spine.set_visible(True)
 
@@ -177,7 +177,7 @@ def plot():
         plt.savefig(os.path.join(SAVE_DIR, f"UMAP_Raw_Comparison.{fmt}"),
                     dpi=600, bbox_inches="tight", pad_inches=0.05)
     plt.close()
-    print("[OK] UMAP_Raw_Comparison 已保存 (png/pdf/svg)")
+    print("[OK] UMAP_Raw_Comparison saved (png/pdf/svg)")
 
 
 if __name__ == "__main__":

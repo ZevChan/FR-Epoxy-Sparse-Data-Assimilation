@@ -19,7 +19,7 @@ RESULTS_DIR = os.path.join(REVISED_DIR, "Results")
 SAVE_DIR = os.path.join(BASE_DIR, "Graphs", "Figure2_Rebuilt_v2")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-# Colors — 蓝色=Literature/Before/Frozen, 红色=Experiment/After/Adaptive
+# Colors — blue=Literature/Before/Frozen, red=Experiment/After/Adaptive
 COLOR_BEFORE = "#5DA5DA"
 COLOR_AFTER  = "#C91511"
 GRAY = "#8C92AC"

@@ -1,5 +1,5 @@
 """
-plot_new_figure2.py — 新版 Figure 2: 数据分布背景 + 受控增量效应
+plot_new_figure2.py — Revised Figure 2: data-distribution context + controlled increment effects
 =================================================================
 (a) UMAP: 2332 literature + 24 experimental
 (b) kNN local sparsity: distance percentile distribution
@@ -7,7 +7,7 @@ plot_new_figure2.py — 新版 Figure 2: 数据分布背景 + 受控增量效应
 (d) 95% CI: Frozen protocol bar chart with error bars
 (e) Frozen vs Adaptive: protocol comparison boxplot / paired lines
 
-输出到 Graphs/ 子文件夹，同时输出 a-e 各子图。
+Outputs to the Graphs/ subfolder, together with individual a-e subplots.
 """
 import os, warnings
 warnings.filterwarnings("ignore")

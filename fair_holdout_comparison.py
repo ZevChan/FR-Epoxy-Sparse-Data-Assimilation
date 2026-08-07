@@ -1,19 +1,20 @@
 """
 ================================================================================
-fair_holdout_comparison.py — 受控数据增量消融实验
+fair_holdout_comparison.py — Controlled data-increment ablation study
 ================================================================================
 
-重构为两种明确协议：
+Refactored into two explicit protocols:
 
-  Frozen protocol（主分析）:
-    特征、K、超参数和预处理器全部由文献训练集确定并冻结。
-    Before/After 唯一系统性差异：训练行是否包含实验数据。
+  Frozen protocol (primary analysis):
+    Features, K, hyperparameters and preprocessing are all determined and
+    frozen on the literature training set. The only systematic difference
+    between Before/After is whether the experimental rows enter training.
 
-  Adaptive protocol（次分析）:
-    Before / After 分别在各自训练集内部选择 K 和超参数，
-    但搜索规则与预算完全相同。
+  Adaptive protocol (secondary analysis):
+    Before/After each select K and hyperparameters inside their own training
+    set, under identical search rules and budget.
 
-目标（5 个）：LOI, UL94_Rating, THR, TSP, Flexural_Strength（pHRR 已移除）
+Targets (5): LOI, UL94_Rating, THR, TSP, Flexural_Strength (pHRR removed)
 ================================================================================
 """
 
@@ -37,7 +38,7 @@ from xgboost import XGBRegressor, XGBClassifier
 
 warnings.filterwarnings("ignore")
 
-# ── 导入共享配置 ──
+# ── Import shared configuration ──
 from config import (
     BASE_DIR, PROJECT_DIR, WITH_DATA_DIR, WITHOUT_DATA_DIR, OUTPUT_DIR,
     TARGETS, DISPLAY_NAMES, SEEDS, DEFAULT_SEED, TEST_SIZE,
@@ -63,7 +64,7 @@ from distribution import export_distribution_data
 
 
 # ==========================================================================
-# 数据加载（与原始项目一致）
+# Data loading (consistent with the original project)
 # ==========================================================================
 def detect_encoding(fp):
     with open(fp, "rb") as f:
@@ -83,7 +84,7 @@ def clean_numeric(df):
         if df[c].dtype == "object":
             for ch in ["?", "*", "#", " "]:
                 df[c] = df[c].astype(str).str.replace(ch, "", regex=False)
-            # 剥离不可见 Unicode 空格（零宽空格、窄空格、BOM、NBSP 等）后再转数值
+            # Strip invisible Unicode whitespace (zero-width, narrow, BOM, NBSP, etc.) before numeric conversion
             df[c] = df[c].astype(str).str.replace(
                 "[​         ﻿ ]",
                 "", regex=True)
@@ -103,9 +104,9 @@ def load_features(data_dir):
         raise FileNotFoundError(f"No feature files in {data_dir}")
     X = pd.concat(dfs, axis=1)
 
-    # ── 强制保留特征：从 Dataset_with_SMILES 提取配方添加量列 ──
-    # 阻燃剂/固化剂/Other Material 添加量（固化温度/时间/压力已在 Curing_Strategy.csv）
-    # 注意：CSV 版缺 1 行（2355 vs 2356），必须优先使用 XLSX 版（2356 行，与描述符矩阵对齐）
+    # ── Forced features: extract formulation amount columns from Dataset_with_SMILES ──
+    # Flame-retardant / curing-agent / Other-Material amounts (curing T/t/p already in Curing_Strategy.csv)
+    # NOTE: CSV version is 1 row short (2355 vs 2356); the XLSX version (2356 rows, aligned with descriptor matrices) takes priority
     smiles_fp = os.path.join(data_dir, "Dataset_with_SMILES.xlsx")
     use_xlsx = os.path.exists(smiles_fp)
     if not use_xlsx:
@@ -126,9 +127,9 @@ def load_features(data_dir):
                        if c in raw.columns and "AdditionAmount" in c]
         if amount_cols:
             amounts = clean_numeric(raw[amount_cols])
-            # ── 添加量 NaN 语义处理 ──
-            # 规则：对应材料名称列为空 → 添加量视为 0（未添加）；
-            #       材料名称存在但添加量为 NaN → 标记为数据不完整（保留 NaN，由 imputer 处理）
+            # ── NaN semantics for amounts ──
+            # Rule: material-name column empty -> amount treated as 0 (not added);
+            #       material name present but amount NaN -> flagged as incomplete (NaN kept, handled by imputer)
             material_name_map = {
                 "Flame_retardant_AdditionAmount(wt%)": "Flame_retardant",
                 "Curing_agent_AdditionAmount(wt%)": "Curing_agent ",
@@ -142,14 +143,14 @@ def load_features(data_dir):
                     if name_col in raw.columns:
                         name_empty = raw[name_col].isna() | (raw[name_col].astype(str).str.strip() == "")
                         amount_nan = amounts[col].isna()
-                        # 材料名称为空 + 添加量 NaN → 填 0（该组分未添加）
+                        # Empty material name + NaN amount -> fill 0 (component not added)
                         amounts.loc[name_empty & amount_nan, col] = 0.0
-                        # 材料名称存在 + 添加量 NaN → 保留 NaN（数据不完整标记）
+                        # Material name present + NaN amount -> keep NaN (incomplete-data marker)
                         n_incomplete = int((~name_empty & amount_nan).sum())
                         if n_incomplete > 0:
                             print(f"  [WARN] {col}: {n_incomplete} rows have material "
                                   f"name but NaN amount (kept as missing)")
-            # 与现有 X 对齐行数（DataFrame concat 按位置对齐）
+            # Align row counts with existing X (DataFrame concat aligns by position)
             if len(amounts) == len(X):
                 X = pd.concat([X, amounts], axis=1)
             else:
@@ -162,18 +163,18 @@ def load_targets(data_dir):
     return clean_numeric(read_csv_enc(fp))
 
 def process_ul94(y):
-    """UL-94: 原始值 3 → 正类 1 (V-0)，其余 → 0 (Non-V-0)。"""
+    """UL-94: raw value 3 -> positive class 1 (V-0), all others -> 0 (Non-V-0)."""
     y = pd.to_numeric(y, errors="coerce").fillna(-1).astype(int)
     return (y == 3).astype(int)
 
 
 # ==========================================================================
-# 固定数据划分
+# Fixed data split
 # ==========================================================================
 def prepare_fixed_split():
-    """加载数据并确定文献/实验划分。"""
+    """Load data and determine the literature/experiment split."""
     print("=" * 60)
-    print("  加载数据 & 确定文献/实验划分")
+    print("  Loading data & determining literature/experiment split")
     print("=" * 60)
 
     X_all = load_features(WITH_DATA_DIR)
@@ -184,26 +185,26 @@ def prepare_fixed_split():
     N_ALL = len(X_all)
     is_literature = np.arange(N_ALL) < N_LIT
 
-    # 数据身份断言
+    # Data identity assertion
     try:
         pd.testing.assert_frame_equal(
             X_all.iloc[:N_LIT].reset_index(drop=True),
             X_wo.reset_index(drop=True),
             check_dtype=False,
         )
-        print("  [OK] 文献数据身份验证通过")
+        print("  [OK] Literature data identity verified")
     except AssertionError as exc:
         raise RuntimeError(
             "FATAL: Literature rows in WITH_DATA do not match WITHOUT_DATA. "
             "Check data sources."
         ) from exc
 
-    print(f"  文献样本: {N_LIT}  |  实验样本: {N_ALL - N_LIT}  |  总计: {N_ALL}")
+    print(f"  Literature: {N_LIT}  |  Experiment: {N_ALL - N_LIT}  |  Total: {N_ALL}")
     return X_all, y_all, N_LIT, is_literature
 
 
 def get_train_test_for_target(X_all, y_all, is_literature, target_col, seed=DEFAULT_SEED):
-    """为目标列构建固定 Before/After 训练集 + 固定测试集。支持可变 seed。"""
+    """Build fixed Before/After training sets + fixed test set for a target column. Seed-aware."""
     valid = y_all[target_col].notna().values
     X_v = X_all.loc[valid].copy()
     y_v = y_all.loc[valid, target_col].copy()
@@ -260,10 +261,10 @@ def get_train_test_for_target(X_all, y_all, is_literature, target_col, seed=DEFA
 
 
 # ==========================================================================
-# 配置选择（只用文献训练集，测试集完全退出）
+# Configuration selection (literature training set only; test set fully excluded)
 # ==========================================================================
 def build_splitter(is_cls, seed, y=None):
-    """CV 划分器：分类使用 StratifiedKFold，动态调整折数。"""
+    """CV splitter: StratifiedKFold for classification, with dynamic fold adjustment."""
     if is_cls:
         if y is None:
             raise ValueError("y is required for classification CV")
@@ -276,8 +277,8 @@ def build_splitter(is_cls, seed, y=None):
 
 
 def build_fold_rankings(X, y, is_cls, seed):
-    """在每个 CV fold 内计算特征排序，缓存预处理后的 numpy 数组。
-    关键：保存全特征预处理后的 X_train_p/X_valid_p，后续按索引切片。"""
+    """Compute per-CV-fold feature rankings and cache preprocessed numpy arrays.
+    Key: keep the full-feature preprocessed X_train_p/X_valid_p, sliced by index later."""
     splitter = build_splitter(is_cls, seed, y if is_cls else None)
 
     split_iter = splitter.split(X, y) if is_cls else splitter.split(X)
@@ -314,8 +315,8 @@ def build_fold_rankings(X, y, is_cls, seed):
 
 def cv_objective_at_k(trial, X, y, k, is_cls, seed, fold_rankings,
                         forced_idx=None, nonmandatory_idx=None):
-    """给定 Top-K 非强制特征（+强制特征），在 CV fold 内做 HPO 并返回平均 CV 分数。
-    K = 额外选取的非强制特征数。"""
+    """Given top-K non-mandatory features (+mandatory), run HPO within CV folds and return the mean CV score.
+    K = number of extra non-mandatory features selected."""
     import optuna
 
     param = {
@@ -331,8 +332,8 @@ def cv_objective_at_k(trial, X, y, k, is_cls, seed, fold_rankings,
 
     scores = []
     for fr in fold_rankings:
-        # 用预保存的 numpy 数组按索引切片——避免 sklearn feature name 不匹配
-        # K 表示非强制特征数：从 fold ranking 中取前 K 个非强制特征，再并入强制特征
+        # Slice pre-saved numpy arrays by index to avoid sklearn feature-name mismatches
+        # K = number of non-mandatory features: take top-K non-mandatory from fold ranking, then merge mandatory
         if nonmandatory_idx is not None:
             nonmandatory_set = set(nonmandatory_idx)
             top_nonmandatory = [i for i in fr["ranking"] if i in nonmandatory_set][:k]
@@ -360,8 +361,8 @@ def cv_objective_at_k(trial, X, y, k, is_cls, seed, fold_rankings,
 
 def scan_cv_score_at_k(X, y, k, is_cls, seed, fold_rankings,
                          forced_idx=None, nonmandatory_idx=None):
-    """K 扫描阶段的快速评估：默认 XGBoost 参数，不用 Optuna。
-    K = 额外选取的非强制特征数。"""
+    """Fast evaluation for the K-scan stage: default XGBoost params, no Optuna.
+    K = number of extra non-mandatory features selected."""
     scores = []
     for fr in fold_rankings:
         if nonmandatory_idx is not None:
@@ -390,7 +391,7 @@ def scan_cv_score_at_k(X, y, k, is_cls, seed, fold_rankings,
 
 
 def fit_final_ranking(X, y, is_cls, seed):
-    """在全量数据上拟合最终特征排序（不再使用 CV）。"""
+    """Fit the final feature ranking on the full data (no CV)."""
     preprocessor = Pipeline([
         ("imputer", SimpleImputer(strategy="mean", keep_empty_features=True)),
         ("scaler", StandardScaler()),
@@ -408,10 +409,10 @@ def fit_final_ranking(X, y, is_cls, seed):
 def _scan_full_k(X, y, is_cls, seed, fold_rankings,
                  nonmandatory_idx, mandatory_idx, max_k=None, params=None,
                  nonmandatory_rankings=None, patience=None, min_delta=None):
-    """K 递增扫描，固定基础超参数，5 折 CV。
-    patience: 连续 N 个 K 无性能提升（超过 min_delta）则停止搜索（不做 HPO）。
-    patience=None 时扫描全部 K=1..max_k。
-    返回 (scores dict, fold_scores dict)。"""
+    """Incremental K scan with fixed base hyperparameters and 5-fold CV.
+    patience: stop after N consecutive K without improvement (above min_delta); no HPO.
+    When patience=None, scan all K=1..max_k.
+    Returns (scores dict, fold_scores dict)."""
     if max_k is None:
         max_k = MAX_K
     if params is None:
@@ -420,7 +421,7 @@ def _scan_full_k(X, y, is_cls, seed, fold_rankings,
         patience = PATIENCE_K
     if min_delta is None:
         min_delta = MIN_DELTA_K
-    # 预计算：每 fold 的非强制特征排序索引（避免每次 K 重建 set + 遍历全数组）
+    # Precompute per-fold non-mandatory ranking indices (avoid rebuilding sets/arrays per K)
     if nonmandatory_rankings is None:
         nonmandatory_set = set(nonmandatory_idx)
         nonmandatory_rankings = [
@@ -454,7 +455,7 @@ def _scan_full_k(X, y, is_cls, seed, fold_rankings,
         if k % 50 == 0:
             print(f"      [scan] K={k}, CV={scores[k]:.4f}", flush=True)
 
-        # patience 早停：仅当启用且确实有提升才更新 best
+        # patience early stop: update best only when enabled and genuinely improved
         if patience is not None:
             if scores[k] > best_score + min_delta:
                 best_score = scores[k]
@@ -470,9 +471,9 @@ def _scan_full_k(X, y, is_cls, seed, fold_rankings,
 
 
 def _build_candidate_k(scores, fold_scores):
-    """候选 K 集合：只删除完全重复的 K，不压缩相邻 K。
-    保留：1. CV 最高前 N_TOP_CANDIDATE_K；2. CV_max-CV_k<=CV_TOLERANCE 的所有 K；
-    3. 上述候选的 ±K_NEIGHBOR_RADIUS 整数点。"""
+    """Candidate K set: only fully duplicate K removed; adjacent K not merged.
+    Keeps: 1. top-N_TOP_CANDIDATE_K by CV; 2. all K with CV_max-CV_k<=CV_TOLERANCE;
+    3. +/-K_NEIGHBOR_RADIUS integer points around the above candidates."""
     cv_max = max(scores.values())
     cand = set()
     top_k = sorted(scores, key=lambda k: scores[k], reverse=True)[:N_TOP_CANDIDATE_K]
@@ -487,7 +488,7 @@ def _build_candidate_k(scores, fold_scores):
 def _joint_hpo(X, y, is_cls, seed, fold_rankings, candidate_k,
                nonmandatory_idx, mandatory_idx, n_trials=JOINT_HPO_TRIALS,
                nonmandatory_rankings=None):
-    """K 作为 categorical 与 XGBoost 超参联合 Optuna 优化。"""
+    """Joint Optuna optimisation of K (categorical) with XGBoost hyperparameters."""
     import optuna
     from optuna.samplers import TPESampler
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -539,7 +540,7 @@ def _joint_hpo(X, y, is_cls, seed, fold_rankings, candidate_k,
 
 def _check_upper_bound(X, y, is_cls, seed, fold_rankings, nonmandatory_idx,
                        mandatory_idx, params):
-    """截断验证：检查 K=MAX_K+500, MAX_K+1000, 全特征，确认 1000 非人为截断。"""
+    """Truncation check: evaluate K=MAX_K+500, MAX_K+1000, all-features to confirm 1000 is not an artificial cutoff."""
     n_features = len(nonmandatory_idx)
     checks = sorted({min(MAX_K + 500, n_features), min(MAX_K + 1000, n_features), n_features})
     nonmandatory_set = set(nonmandatory_idx)
@@ -571,15 +572,16 @@ def _check_upper_bound(X, y, is_cls, seed, fold_rankings, nonmandatory_idx,
 
 
 def select_configuration(X, y, is_cls, seed):
-    """K 选择流程（用户最终指定）：
-    1. K 递增扫描（固定基础参数，5 折 CV，不做任何 HPO）；
-       连续 PATIENCE_K=50 个 K 无性能提升 → 停止 K 搜索；
-    2. 从扫描结果取 CV 最高的 TOP_K_CANDIDATES=3 个 K；
-    3. 只对这 3 个 K 分别做 HPO（每个 K 固定，优化 XGBoost 超参）；
-    4. 在 3 个 K 中选 HPO CV 最高的一个作为最终 K；
-    5. 截断硬门槛：哨兵 K（MAX_K+500/MAX_K+1000/全特征）若超过 K<=MAX_K
-       最佳 CV + SENTINEL_TOLERANCE → RuntimeError。
-    K = 非强制保留特征数。"""
+    """K-selection workflow (as finally specified):
+    1. Incremental K scan (fixed base params, 5-fold CV, no HPO);
+       stop after PATIENCE_K=50 consecutive K without improvement;
+    2. take the top TOP_K_CANDIDATES=3 K by scan CV;
+    3. run HPO on each of those K (K fixed, optimise XGBoost hyperparams);
+    4. pick the K with the highest HPO CV as the final K;
+    5. truncation hard gate: raise RuntimeError if a sentinel K
+       (MAX_K+500/MAX_K+1000/all-features) beats the best K<=MAX_K CV by
+       more than SENTINEL_TOLERANCE.
+    K = number of non-mandatory retained features."""
     feat_names = list(X.columns)
     mandatory_idx = [i for i, c in enumerate(feat_names) if c in FORCED_FEATURES]
     nonmandatory_idx = [i for i in range(len(feat_names)) if i not in set(mandatory_idx)]
@@ -592,7 +594,7 @@ def select_configuration(X, y, is_cls, seed):
         for fr in fold_rankings
     ]
 
-    # ── 1. K 递增扫描（patience 早停，无 HPO）──
+    # ── 1. Incremental K scan (patience early stop, no HPO) ──
     print(f"    [scan] K incremental scan (fixed base params, {N_CV_FOLDS}-fold CV, "
           f"patience={PATIENCE_K})...")
     scan_scores, fold_scores = _scan_full_k(
@@ -600,12 +602,12 @@ def select_configuration(X, y, is_cls, seed):
         nonmandatory_rankings=nonmandatory_rankings)
     print(f"    [scan] scanned {len(scan_scores)} K values (1..{max(scan_scores)})")
 
-    # ── 2. 只取扫描 CV 最高的 1 个 K ──
+    # ── 2. Take only the single highest-scan-CV K ──
     final_k = max(scan_scores, key=lambda k: scan_scores[k])
     scan_best_cv = scan_scores[final_k]
     print(f"    [best-k-scan] K={final_k}, scan CV={scan_best_cv:.4f}")
 
-    # ── 3. 只对该 K 做一次 HPO ──
+    # ── 3. Run HPO once on that K ──
     study = _hpo_for_fixed_k(X, y, is_cls, seed, fold_rankings, final_k,
                              nonmandatory_idx, mandatory_idx,
                              nonmandatory_rankings=nonmandatory_rankings)
@@ -618,9 +620,9 @@ def select_configuration(X, y, is_cls, seed):
           f"lr={best_params['learning_rate']:.4f}")
     print(f"    [best] K={final_k}, HPO_CV={final_cv:.4f}")
 
-    # ── 5. 截断验证已移除（用户指定：不检查哨兵 K）──
+    # ── 5. Truncation check removed (user-specified: no sentinel K check) ──
 
-    # 最终特征：强制特征(active) ∪ Top-K 非强制特征
+    # Final features: mandatory (active) union Top-K non-mandatory
     forced_present = [f for f in FORCED_FEATURES if f in feat_names]
     n_mandatory_active = len(forced_present)
     final_ranking = fit_final_ranking(X, y, is_cls, seed)
@@ -656,7 +658,7 @@ def select_configuration(X, y, is_cls, seed):
 def _hpo_for_fixed_k(X, y, is_cls, seed, fold_rankings, k,
                      nonmandatory_idx, mandatory_idx,
                      nonmandatory_rankings=None, n_trials=JOINT_HPO_TRIALS):
-    """对固定 K 优化 XGBoost 超参（TPE, Optuna）。返回 study。"""
+    """Optimise XGBoost hyperparameters for a fixed K (TPE, Optuna). Returns the study."""
     import optuna
     from optuna.samplers import TPESampler
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -672,7 +674,7 @@ def _hpo_for_fixed_k(X, y, is_cls, seed, fold_rankings, k,
     _hpo_state = {"last_best": None, "no_improve": 0}
 
     def _early_stop(study, trial):
-        """连续 HPO_PATIENCE 个新 trial 未刷新 best_value 则停止。"""
+        """Stop after HPO_PATIENCE consecutive new trials fail to refresh best_value."""
         v = trial.value
         if v is None:
             return
@@ -723,7 +725,7 @@ def _hpo_for_fixed_k(X, y, is_cls, seed, fold_rankings, k,
 
 # ==========================================================================
 def make_model(params, is_cls, seed):
-    """根据参数创建 XGBoost 模型。"""
+    """Create an XGBoost model from the given parameters."""
     base = {
         "n_estimators": params.get("n_estimators", 100),
         "max_depth": params.get("max_depth", 6),
@@ -758,13 +760,13 @@ def _configuration_payload(config):
 
 
 def run_frozen_comparison(data, config, seed):
-    """Frozen protocol：共用特征/K/超参/预处理器。
-    预处理器仅在文献训练集上拟合。"""
+    """Frozen protocol: shared features/K/hyperparameters/preprocessor.
+    The preprocessor is fitted only on the literature training set."""
     features = config["features"]
     params = config["params"]
     is_cls = data["is_classification"]
 
-    # 共用预处理器（只在 Before 上 fit）
+    # Shared preprocessor (fitted only on Before)
     preprocessor = Pipeline([
         ("imputer", SimpleImputer(strategy="mean", keep_empty_features=True)),
         ("scaler", StandardScaler()),
@@ -783,11 +785,11 @@ def run_frozen_comparison(data, config, seed):
     pred_before = model_before.predict(X_test)
     pred_after = model_after.predict(X_test)
 
-    # ── 保存 ──
+    # ── Save ──
     frozen_dir = os.path.join(OUTPUT_DIR, "Frozen")
     target = data["target"]
 
-    # 预测
+    # Predictions
     pred_df = pd.DataFrame({
         "sample_id": data["test_sample_ids"],
         "target": target,
@@ -807,7 +809,7 @@ def run_frozen_comparison(data, config, seed):
         os.path.join(frozen_dir, f"predictions_{target}_seed_{seed}.csv"),
         index=False, encoding="utf-8-sig")
 
-    # 配置 + trajectory
+    # Config + trajectory
     with open(os.path.join(frozen_dir, f"config_{target}_seed_{seed}.json"), "w") as f:
         json.dump(_configuration_payload(config), f,
                   ensure_ascii=False, indent=2)
@@ -815,7 +817,7 @@ def run_frozen_comparison(data, config, seed):
         os.path.join(frozen_dir, f"trajectory_{target}_seed_{seed}.csv"),
         index=False, encoding="utf-8-sig")
 
-    # 指标
+    # Metrics
     if is_cls:
         metrics = classification_statistics(
             data["y_test"].to_numpy(), pred_before, pred_after)
@@ -831,7 +833,7 @@ def run_frozen_comparison(data, config, seed):
     metrics["n_test"] = data["n_test"]
     metrics["k"] = config["k"]
 
-    # 统一 primary metric 接口
+    # Unified primary-metric interface
     if is_cls:
         metrics["primary_metric"] = "balanced_accuracy"
         metrics["before_primary"] = metrics["before_balanced_accuracy"]
@@ -842,7 +844,7 @@ def run_frozen_comparison(data, config, seed):
         metrics["after_primary"] = metrics["after_r2"]
     metrics["improvement_delta"] = metrics["after_primary"] - metrics["before_primary"]
 
-    # ── Frozen SHAP 指标 ──
+    # ── Frozen SHAP metrics ──
     try:
         import shap
         explainer_b = shap.TreeExplainer(model_before)
@@ -858,20 +860,20 @@ def run_frozen_comparison(data, config, seed):
         sm_b = calculate_shap_structure_metrics(shap_b_vals, features)
         sm_a = calculate_shap_structure_metrics(shap_a_vals, features)
 
-        # 排名相似度
+        # Ranking similarity
         rs = ranking_similarity(sm_b["normalized_shap"], sm_a["normalized_shap"], features)
 
         metrics["shap_before"] = sm_b
         metrics["shap_after"] = sm_a
         metrics["shap_similarity"] = rs
-        # 结构指标（Before + After 各一条）
+        # Structure metrics (one row each for Before + After)
         metrics["shap_entries"] = [
             {"target": target, "seed": seed, "protocol": "frozen",
              "track": "before", "metrics": sm_b},
             {"target": target, "seed": seed, "protocol": "frozen",
              "track": "after", "metrics": sm_a},
         ]
-        # 排名相似度单独存
+        # Ranking similarity stored separately
         metrics["shap_similarity_entry"] = {
             "target": target, "seed": seed, "protocol": "frozen",
             "top10_jaccard": rs["top10_jaccard"],
@@ -889,11 +891,11 @@ def run_frozen_comparison(data, config, seed):
 
 
 # ==========================================================================
-# Adaptive protocol（次分析）
+# Adaptive protocol (secondary analysis)
 # ==========================================================================
 def fit_and_evaluate_adaptive_track(X_train, y_train, X_test, y_test,
                                      config, track, target, seed):
-    """在给定配置下训练并评估。"""
+    """Train and evaluate under the given configuration."""
     features = config["features"]
     params = config["params"]
     is_cls = "UL94" in target
@@ -934,8 +936,8 @@ def fit_and_evaluate_adaptive_track(X_train, y_train, X_test, y_test,
 
 
 def run_adaptive_comparison(data, seed, config_before=None, config_after=None):
-    """Adaptive protocol：Before/After 各自独立优化，返回配对行。
-    如果提供了 config_before，则复用（避免重复 HPO）。"""
+    """Adaptive protocol: Before/After optimised independently; returns paired rows.
+    If config_before is provided, it is reused (avoids repeated HPO)."""
     target = data["target"]
     is_cls = data["is_classification"]
 
@@ -959,7 +961,7 @@ def run_adaptive_comparison(data, seed, config_before=None, config_after=None):
         X_test=data["X_test"], y_test=data["y_test"],
         config=config_after, track="After", target=target, seed=seed)
 
-    # 保存特征和 trajectory
+    # Save features and trajectory
     adaptive_dir = os.path.join(OUTPUT_DIR, "Adaptive")
     for track, cfg in [("Before", config_before), ("After", config_after)]:
         prefix = f"{track.lower()}_{target}_seed_{seed}"
@@ -972,7 +974,7 @@ def run_adaptive_comparison(data, seed, config_before=None, config_after=None):
             os.path.join(adaptive_dir, f"trajectory_{prefix}.csv"),
             index=False, encoding="utf-8-sig")
 
-    # 配对结果
+    # Paired results
     row = {
         "target": target, "seed": seed, "protocol": "adaptive",
         "before_k": config_before["k"], "after_k": config_after["k"],
@@ -1003,7 +1005,7 @@ def run_adaptive_comparison(data, seed, config_before=None, config_after=None):
 
 
 # ==========================================================================
-# 样本规模
+# Sample sizes
 # ==========================================================================
 def build_sample_size_row(data, seed):
     return {
@@ -1196,7 +1198,7 @@ def _run_or_resume_unit(data, seed):
 
 
 # ==========================================================================
-# 主入口
+# Main entry
 # ==========================================================================
 def main():
     global OUTPUT_DIR, CHECKPOINT_DIR, PIPELINE_STATUS_PATH
@@ -1218,7 +1220,7 @@ def main():
                     "SHAP_Stability", "Distribution", "Logs", "Checkpoints"]:
             os.makedirs(os.path.join(OUTPUT_DIR, sub), exist_ok=True)
         print(f"  [outdir] redirected to {OUTPUT_DIR}")
-    # 1. 加载 & 固定划分
+    # 1. Load & fixed split
     X_all, y_all, N_LIT, is_literature = prepare_fixed_split()
     _write_pipeline_status("running", current={"stage": "initializing"})
 
@@ -1228,7 +1230,7 @@ def main():
     shap_export_entries = []
     shap_similarity_entries = []
 
-    # 2. 多 seed 循环
+    # 2. Multi-seed loop
     seeds = SEEDS if args.seeds is None else [int(s) for s in args.seeds.split(",")]
     targets = TARGETS if args.targets is None else [t.strip() for t in args.targets.split(",")]
     tag = args.tag
@@ -1241,7 +1243,7 @@ def main():
             data = get_train_test_for_target(
                 X_all, y_all, is_literature, target, seed=seed)
             if data is None:
-                print(f"  [WARN] {target}: 样本不足，跳过")
+                print(f"  [WARN] {target}: insufficient samples, skipping")
                 continue
 
             print(f"\n  --- {target} ---")
@@ -1269,9 +1271,9 @@ def main():
                 shap_similarity_entries.append(
                     frozen_metrics["shap_similarity_entry"])
 
-    # 3. 保存
+    # 3. Save
     print(f"\n{'='*60}")
-    print("  保存结果")
+    print("  Saving results")
     print(f"{'='*60}")
 
     pd.DataFrame(sample_size_rows).to_csv(
@@ -1288,7 +1290,7 @@ def main():
         os.path.join(OUTPUT_DIR, "Adaptive", ("adaptive_metrics.csv" if not tag else f"adaptive_metrics_{tag}.csv")),
         index=False, encoding="utf-8-sig")
 
-    # 多 seed 汇总（统一接口：所有行都有 primary_metric/before_primary/after_primary/improvement_delta）
+    # Multi-seed summary (unified interface: every row has primary_metric/before_primary/after_primary/improvement_delta)
     robust_dir = os.path.join(OUTPUT_DIR, "Robustness")
     all_rows = frozen_rows + adaptive_rows
 
@@ -1311,25 +1313,25 @@ def main():
         os.path.join(robust_dir, "multiseed_metrics.csv"),
         index=False, encoding="utf-8-sig")
 
-    # SHAP 结构指标（Before+After 的 top1/top5/eff_n/entropy）
+    # SHAP structure metrics (top1/top5/eff_n/entropy for Before+After)
     if shap_export_entries:
         export_shap_stability(shap_export_entries,
                               os.path.join(OUTPUT_DIR, "SHAP_Stability"))
 
-    # SHAP 排名相似度（top10_jaccard/spearman_rho）
+    # SHAP ranking similarity (top10_jaccard/spearman_rho)
     if shap_similarity_entries:
         pd.DataFrame(shap_similarity_entries).to_csv(
             os.path.join(OUTPUT_DIR, "SHAP_Stability", "shap_ranking_similarity.csv"),
             index=False, encoding="utf-8-sig")
 
-    # 分布数据
+    # Distribution data
     export_distribution_data(X_all, is_literature)
     _write_pipeline_status("complete", current={"stage": "complete"})
 
     print(f"\n{'='*60}")
-    print("  全部完成。")
+    print("  All done.")
     print(f"{'='*60}")
-    print(f"\n  输出目录: {OUTPUT_DIR}")
+    print(f"\n  Output directory: {OUTPUT_DIR}")
     print(f"    SampleSizes/target_sample_sizes.csv")
     print(f"    Frozen/frozen_metrics.csv")
     print(f"    Adaptive/adaptive_metrics.csv")

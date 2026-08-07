@@ -1,12 +1,12 @@
 """
 ================================================================================
- plot_error_density.py — 实验引导前后预测误差密度分布对比
+ plot_error_density.py — Prediction-error density before vs after experimental guidance
 ================================================================================
- 读取 fair_holdout_comparison.py 保存的 predictions CSV，
- 在同一固定测试集上绘制 Before / After 的残差 KDE 曲线。
- 输出 PNG / PDF / SVG。
- 颜色: Before = #5DA5DA (钢蓝), After = #C91511 (深红)
-       零误差线 = #8C92AC (冷石板灰)
+ Reads the predictions CSVs saved by fair_holdout_comparison.py,
+ plots Before/After residual KDE curves on the same fixed test set.
+ Outputs PNG / PDF / SVG.
+ Colors: Before = #5DA5DA (steel blue), After = #C91511 (dark red)
+         zero-error line = #8C92AC (cool slate gray)
 ================================================================================
 """
 
@@ -18,7 +18,7 @@ import os
 import glob
 BASE = os.path.dirname(os.path.abspath(__file__))
 
-# ==================== NC 期刊绘图全局设置 ====================
+# ==================== NC-journal global plot settings ====================
 plt.rcParams.update({
     "font.family": "Arial",
     "font.size": 12,
@@ -35,12 +35,12 @@ plt.rcParams.update({
     "svg.fonttype": "none",
 })
 
-# ==================== 颜色定义 ====================
-COLOR_BEFORE  = "#5DA5DA"   # 钢蓝色 — 文献基准
-COLOR_AFTER   = "#C91511"   # 深红色 — 实验引导后
-COLOR_ZERO    = "#8C92AC"   # 冷石板灰 — 零误差参考线
+# ==================== Color definitions ====================
+COLOR_BEFORE  = "#5DA5DA"   # steel blue — literature baseline
+COLOR_AFTER   = "#C91511"   # dark red — after experimental guidance
+COLOR_ZERO    = "#8C92AC"   # cool slate gray — zero-error reference
 
-# 回归目标（排除 UL94，分类不适合残差密度）
+# regression targets (UL94 excluded; classification does not suit residual density)
 REGRESSION_TARGETS = ["LOI", "THR", "TSP", "Flexural_Strength"]
 
 DISPLAY_NAMES = {
@@ -59,7 +59,7 @@ UNITS = {
     "Flexural_Strength": "MPa",
 }
 
-# ==================== 路径配置 ====================
+# ==================== Path configuration ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(BASE_DIR, "Results", "Frozen")
 SAVE_DIR = os.path.join(BASE_DIR, "Graphs")
@@ -71,7 +71,7 @@ def plot_error_density():
         pred_files = sorted(glob.glob(
             os.path.join(RESULTS_DIR, f"predictions_{target}_seed_*.csv")))
         if not pred_files:
-            print(f"  [WARN] 跳过 {target}: 无 predictions_{target}_seed_*.csv")
+            print(f"  [WARN] skipping {target}: no predictions_{target}_seed_*.csv")
             continue
 
         df = pd.concat([pd.read_csv(f) for f in pred_files], ignore_index=True)
@@ -86,14 +86,14 @@ def plot_error_density():
 
         fig, ax = plt.subplots(figsize=(5.5, 4), dpi=600)
 
-        # KDE 曲线
+        # KDE curves
         from scipy.stats import gaussian_kde
 
         try:
             kde_before = gaussian_kde(residuals_before)
             kde_after = gaussian_kde(residuals_after)
 
-            # 统一 x 范围
+            # unified x range
             all_res = np.concatenate([residuals_before, residuals_after])
             x_range = np.linspace(all_res.min() * 1.15, all_res.max() * 1.15, 300)
 
@@ -105,7 +105,7 @@ def plot_error_density():
             ax.plot(x_range, kde_after(x_range), color=COLOR_AFTER, linewidth=1.8,
                     label="After (Literature + Experiment)")
         except Exception:
-            # 回退到直方图
+            # fall back to histograms
             ax.hist(residuals_before, bins=20, density=True, alpha=0.35,
                     color=COLOR_BEFORE, edgecolor="white", linewidth=0.3,
                     label="Before (Literature only)")
@@ -113,7 +113,7 @@ def plot_error_density():
                     color=COLOR_AFTER, edgecolor="white", linewidth=0.3,
                     label="After (Literature + Experiment)")
 
-        # 零误差参考线
+        # zero-error reference line
         ax.axvline(0, color=COLOR_ZERO, linestyle="--", linewidth=1.0, alpha=0.8)
 
         display_name = DISPLAY_NAMES.get(target, target)
@@ -124,16 +124,16 @@ def plot_error_density():
         ax.legend(frameon=True, fancybox=False, edgecolor="#333333",
                   fontsize=14, loc="upper right")
         ax.grid(axis="y", linestyle=":", alpha=0.3)
-        ax.set_ylim(top=ax.get_ylim()[1] * 1.35)  # 仅扩大Y轴上限
+        ax.set_ylim(top=ax.get_ylim()[1] * 1.35)  # only expand the Y upper limit
 
         plt.tight_layout()
         for fmt in ["png", "pdf", "svg"]:
             plt.savefig(os.path.join(SAVE_DIR, f"Error_Density_{target}.{fmt}"),
                         dpi=600, bbox_inches="tight")
         plt.close()
-        print(f"[OK] Error_Density_{target} 已保存 (png/pdf/svg)")
+        print(f"[OK] Error_Density_{target} saved (png/pdf/svg)")
 
-    # ---- UL94 二分类：混淆矩阵分布对比 ----
+    # ---- UL94 binary: confusion-matrix distribution comparison ----
     ul94_files = sorted(glob.glob(
         os.path.join(RESULTS_DIR, "predictions_UL94_Rating_seed_*.csv")))
     if ul94_files:
@@ -166,7 +166,7 @@ def plot_error_density():
                     color=COLOR_AFTER, edgecolor="white", linewidth=0.5,
                     label="After (Literature + Experiment)")
 
-        # 数字标签
+        # numeric labels
         for bar in b1:
             h = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2, h + 0.5, str(int(h)),
@@ -192,12 +192,12 @@ def plot_error_density():
             plt.savefig(os.path.join(SAVE_DIR, f"Error_Density_UL94_Rating.{fmt}"),
                         dpi=600, bbox_inches="tight")
         plt.close()
-        print("[OK] Error_Density_UL94_Rating 已保存 (png/pdf/svg)")
+        print("[OK] Error_Density_UL94_Rating saved (png/pdf/svg)")
     else:
-        print("[WARN] 跳过 UL94_Rating: 预测文件不存在")
+        print("[WARN] skipping UL94_Rating: prediction files not found")
 
 
 if __name__ == "__main__":
-    print("生成误差密度分布图 ...")
+    print("Generating error-density plots ...")
     plot_error_density()
-    print("完成。")
+    print("Done.")

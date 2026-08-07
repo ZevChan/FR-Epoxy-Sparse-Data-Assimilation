@@ -1,7 +1,7 @@
 import os
 BASE = os.path.dirname(os.path.abspath(__file__))
 """
-shap_metrics.py — SHAP 决策结构稳定性指标
+shap_metrics.py — SHAP decision-structure stability metrics
 ============================================
 """
 import numpy as np
@@ -10,7 +10,7 @@ from scipy.stats import spearmanr
 
 
 def calculate_shap_structure_metrics(shap_values, feature_names):
-    """从 SHAP values 计算特征集中度指标。"""
+    """Compute feature-concentration metrics from SHAP values."""
     mean_abs = np.abs(shap_values).mean(axis=0)
     total = mean_abs.sum()
     if total <= 0:
@@ -36,7 +36,7 @@ def calculate_shap_structure_metrics(shap_values, feature_names):
 
 
 def ranking_similarity(before_scores, after_scores, feature_names):
-    """Before/After 特征排名相似度。"""
+    """Before/After feature-ranking similarity."""
     bs = np.asarray(before_scores, dtype=float)
     as_ = np.asarray(after_scores, dtype=float)
     names = list(feature_names)
@@ -63,7 +63,7 @@ def ranking_similarity(before_scores, after_scores, feature_names):
 
 
 def export_shap_stability(shap_metrics_list, output_dir):
-    """导出多 seed SHAP 稳定性数据。"""
+    """Export multi-seed SHAP stability data."""
     metrics_rows = []
     feature_rows = []
 
