@@ -11,8 +11,10 @@ Refactored into two explicit protocols:
     between Before/After is whether the experimental rows enter training.
 
   Adaptive protocol (secondary analysis):
-    Before/After each select K and hyperparameters inside their own training
-    set, under identical search rules and budget.
+    Before reuses the literature-only configuration selected for Frozen.
+    After reselects features, K and hyperparameters on the augmented training
+    set under the same search rules and budget. Each track fits preprocessing
+    on its own training set; the literature holdout is unchanged.
 
 Targets (5): LOI, UL94_Rating, THR, TSP, Flexural_Strength (pHRR removed)
 ================================================================================
@@ -411,7 +413,8 @@ def _scan_full_k(X, y, is_cls, seed, fold_rankings,
                  nonmandatory_rankings=None, patience=None, min_delta=None):
     """Incremental K scan with fixed base hyperparameters and 5-fold CV.
     patience: stop after N consecutive K without improvement (above min_delta); no HPO.
-    When patience=None, scan all K=1..max_k.
+    When patience is None, PATIENCE_K is used; when min_delta is None,
+    MIN_DELTA_K is used. The scan can stop before reaching max_k.
     Returns (scores dict, fold_scores dict)."""
     if max_k is None:
         max_k = MAX_K
@@ -471,7 +474,8 @@ def _scan_full_k(X, y, is_cls, seed, fold_rankings,
 
 
 def _build_candidate_k(scores, fold_scores):
-    """Candidate K set: only fully duplicate K removed; adjacent K not merged.
+    """Legacy helper; not called by the formal single-K workflow.
+    Candidate K set: only fully duplicate K removed; adjacent K not merged.
     Keeps: 1. top-N_TOP_CANDIDATE_K by CV; 2. all K with CV_max-CV_k<=CV_TOLERANCE;
     3. +/-K_NEIGHBOR_RADIUS integer points around the above candidates."""
     cv_max = max(scores.values())
@@ -488,7 +492,7 @@ def _build_candidate_k(scores, fold_scores):
 def _joint_hpo(X, y, is_cls, seed, fold_rankings, candidate_k,
                nonmandatory_idx, mandatory_idx, n_trials=JOINT_HPO_TRIALS,
                nonmandatory_rankings=None):
-    """Joint Optuna optimisation of K (categorical) with XGBoost hyperparameters."""
+    """Legacy joint K/HPO helper; not called by the formal single-K workflow."""
     import optuna
     from optuna.samplers import TPESampler
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -540,7 +544,9 @@ def _joint_hpo(X, y, is_cls, seed, fold_rankings, candidate_k,
 
 def _check_upper_bound(X, y, is_cls, seed, fold_rankings, nonmandatory_idx,
                        mandatory_idx, params):
-    """Truncation check: evaluate K=MAX_K+500, MAX_K+1000, all-features to confirm 1000 is not an artificial cutoff."""
+    """Legacy high-K check; not called by the formal single-K workflow.
+    Evaluates K=MAX_K+500, MAX_K+1000 and all non-mandatory features.
+    """
     n_features = len(nonmandatory_idx)
     checks = sorted({min(MAX_K + 500, n_features), min(MAX_K + 1000, n_features), n_features})
     nonmandatory_set = set(nonmandatory_idx)
@@ -572,16 +578,21 @@ def _check_upper_bound(X, y, is_cls, seed, fold_rankings, nonmandatory_idx,
 
 
 def select_configuration(X, y, is_cls, seed):
-    """K-selection workflow (as finally specified):
-    1. Incremental K scan (fixed base params, 5-fold CV, no HPO);
-       stop after PATIENCE_K=50 consecutive K without improvement;
-    2. take the top TOP_K_CANDIDATES=3 K by scan CV;
-    3. run HPO on each of those K (K fixed, optimise XGBoost hyperparams);
-    4. pick the K with the highest HPO CV as the final K;
-    5. truncation hard gate: raise RuntimeError if a sentinel K
-       (MAX_K+500/MAX_K+1000/all-features) beats the best K<=MAX_K CV by
-       more than SENTINEL_TOLERANCE.
-    K = number of non-mandatory retained features."""
+    """Select the configuration using the formal single-K workflow.
+
+    1. Scan integer K values from 1 to MAX_K with SCAN_BASE_PARAMS and
+       internal N_CV_FOLDS-fold CV. Stop after PATIENCE_K consecutive
+       steps without a score exceeding the tracked best by MIN_DELTA_K.
+    2. Select the single K with the highest mean score among scanned K.
+    3. Optimise XGBoost hyperparameters only at that K using Optuna,
+       with at most JOINT_HPO_TRIALS trials and HPO_PATIENCE early stopping.
+    4. Recompute the feature ranking on the full supplied training set.
+    5. Retain present mandatory features and the top K non-mandatory features.
+
+    K counts non-mandatory retained features. No multiple-candidate K HPO,
+    joint K/hyperparameter search, alternating search or high-K sentinel
+    check is executed. The holdout is not used for configuration selection.
+    """
     feat_names = list(X.columns)
     mandatory_idx = [i for i, c in enumerate(feat_names) if c in FORCED_FEATURES]
     nonmandatory_idx = [i for i in range(len(feat_names)) if i not in set(mandatory_idx)]
@@ -620,7 +631,7 @@ def select_configuration(X, y, is_cls, seed):
           f"lr={best_params['learning_rate']:.4f}")
     print(f"    [best] K={final_k}, HPO_CV={final_cv:.4f}")
 
-    # ── 5. Truncation check removed (user-specified: no sentinel K check) ──
+    # The formal single-K workflow does not execute a high-K sentinel check.
 
     # Final features: mandatory (active) union Top-K non-mandatory
     forced_present = [f for f in FORCED_FEATURES if f in feat_names]
@@ -936,8 +947,13 @@ def fit_and_evaluate_adaptive_track(X_train, y_train, X_test, y_test,
 
 
 def run_adaptive_comparison(data, seed, config_before=None, config_after=None):
-    """Adaptive protocol: Before/After optimised independently; returns paired rows.
-    If config_before is provided, it is reused (avoids repeated HPO)."""
+    """Evaluate paired Adaptive tracks with training-specific preprocessing.
+
+    The formal main workflow supplies the Frozen literature-only configuration
+    as config_before and reselects config_after on augmented training data.
+    A supplied configuration is reused; an omitted one is selected on that
+    track's training data. Saved configurations may be supplied when resuming.
+    """
     target = data["target"]
     is_cls = data["is_classification"]
 
