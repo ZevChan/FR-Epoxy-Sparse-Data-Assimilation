@@ -2,7 +2,9 @@
 config.py — Shared configuration for the controlled data-increment ablation study
 ==================================================================================
 Frozen protocol:  configuration determined and frozen on the literature training set
-Adaptive protocol: Before/After optimized independently under identical rules
+Adaptive protocol: Before reuses the Frozen literature-only configuration;
+                   After reselects its configuration on augmented training data.
+                   Each track fits preprocessing on its own training set.
 """
 import os
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -55,10 +57,10 @@ MIN_DELTA = 0.001
 PATIENCE = 10
 N_BOOTSTRAP = 5000
 
-# ===== K scan (final method: full integer scan, step 1) =====
-# K=1..MAX_K full-integer scan (fixed default XGBoost params + 5-fold CV,
-# no patience) because feature-entry order can cause abrupt performance jumps
-# (e.g. LOI K=94) that a coarse grid would miss.
+# ===== K scan (formal method: integer steps with early stopping) =====
+# Scan K=1..MAX_K with SCAN_BASE_PARAMS and N_CV_FOLDS-fold internal CV.
+# Early stopping uses PATIENCE_K and MIN_DELTA_K; MAX_K is an upper bound.
+# Only the single K with the highest scanned mean CV score is passed to HPO.
 MAX_K = 1000
 # Scan uses fixed base hyperparameters (no tuning)
 SCAN_BASE_PARAMS = {
@@ -70,17 +72,20 @@ SCAN_BASE_PARAMS = {
     "reg_alpha": 0,
     "reg_lambda": 1,
 }
-# Candidate K set (only fully duplicate K removed; adjacent K are not merged)
-TOP_K_CANDIDATES = 1        # run HPO only on the single highest-scan-CV K
-N_TOP_CANDIDATE_K = 10      # top-N K by CV (reserve)
-CV_TOLERANCE = 0.002        # K with CV_max - CV_k <= tol also enters candidates
-K_NEIGHBOR_RADIUS = 2       # integer points within +/-radius of candidate K
+# Legacy options retained for compatibility; not consulted by the formal
+# select_configuration -> _scan_full_k -> _hpo_for_fixed_k workflow.
+TOP_K_CANDIDATES = 1        # historical setting; single-K selection is implemented directly
+N_TOP_CANDIDATE_K = 10      # used only by the legacy candidate-set helper
+CV_TOLERANCE = 0.002        # used only by the legacy candidate-set helper
+K_NEIGHBOR_RADIUS = 2       # used only by the legacy candidate-set helper
+# Active parameters in the formal workflow:
 PATIENCE_K = 50             # K scan: stop after N consecutive K without improvement (pre-HPO early stop)
 MIN_DELTA_K = 0.0005        # minimum CV increment treated as "improvement" in the K scan
 JOINT_HPO_TRIALS = 50       # Optuna HPO trials per single K
 HPO_PATIENCE = 10           # HPO early stop: stop after N consecutive trials without improvement
-MAX_ALTERNATING_ROUNDS = 4  # max alternating K-hyperparameter search rounds (convergence-based, not fixed at 2)
-SENTINEL_TOLERANCE = 0.002  # raise error to extend scan if a high-K sentinel beats the best K<=MAX_K CV by this tolerance
+# Legacy options; no alternating search or sentinel gate is executed:
+MAX_ALTERNATING_ROUNDS = 4  # retained for compatibility; unused by the formal workflow
+SENTINEL_TOLERANCE = 0.002  # retained for compatibility; unused by the formal workflow
 
 # ── Experiment seeds ──
 # Formal runs use EVALUATION_SEEDS (10 fresh seeds)
