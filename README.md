@@ -5,9 +5,21 @@ Machine-learning-guided evaluation of **sparse experimental data value** in flam
 This repository implements a controlled, reproducible evaluation framework that quantifies how a small set of new experimental samples improves XGBoost models trained on literature data. It supports two explicit protocols:
 
 - **Frozen protocol (primary):** features, K, hyperparameters, and preprocessing are all determined on the literature training set and *frozen*. The only systematic difference between Before (literature only) and After (literature + experiment) is whether the experimental rows are included in training.
-- **Adaptive protocol (secondary):** Before/After each select K and hyperparameters inside their own training set, under identical search rules and budget.
+- **Adaptive protocol (secondary):** Before reuses the literature-only configuration selected for Frozen. After reselects features, K and hyperparameters on the augmented training set under the same search rules and budget. Preprocessing is fitted separately on each track's training set. Both protocols evaluate the same literature holdout for each target and seed.
 
 A low-cost **knowledge-assimilation** post-processing layer (`run_knowledge_assimilation.py`) additionally measures per-experiment marginal value (LOEO), dose-response curves, knowledge propagation, and utility–plasticity phase maps — without re-running Optuna or feature selection.
+
+## Formal configuration-selection procedure
+
+The formal workflow in `select_configuration()` uses a single selected K:
+
+1. Scan integer K values from 1 to `MAX_K=1000` with fixed `SCAN_BASE_PARAMS` and five-fold internal CV. K counts non-mandatory features; present mandatory features are retained in addition.
+2. Stop after `PATIENCE_K=50` consecutive steps without a score exceeding the tracked best by `MIN_DELTA_K=0.0005`, or at the upper bound. The scan need not reach K=1000.
+3. Select the single K with the highest mean CV score among all scanned K values.
+4. Optimise XGBoost hyperparameters only at this K using Optuna, with at most `JOINT_HPO_TRIALS=50` trials. HPO stops early after `HPO_PATIENCE=10` consecutive trials without a new best score.
+5. Recompute the feature ranking on the full supplied training set and retain present mandatory features plus the top K non-mandatory features.
+
+No top-three-K optimisation, joint K/hyperparameter search, alternating search or high-K sentinel check is executed. Legacy helpers and configuration options remain for compatibility and are identified in their documentation. The fixed literature holdout is not used for feature selection or HPO.
 
 ## Project structure
 
@@ -87,9 +99,11 @@ The pipeline writes to `Results/` (`Frozen/`, `Adaptive/`, `Robustness/`, `SHAP_
 # validate inputs only (no model fitting)
 python run_knowledge_assimilation.py --validate-only
 
-# main analysis on seed 42 (or any completed seed)
-python run_knowledge_assimilation.py --seeds 42 --dose-repeats 20
+# formal analysis on the ten evaluation seeds (requires completed core outputs)
+python run_knowledge_assimilation.py --seeds 7,13,19,29,37,43,53,61,71,79 --dose-repeats 20
 ```
+
+Seed 42 is a development/example run and is excluded from formal inference. An explicitly requested example run is `python run_knowledge_assimilation.py --seeds 42 --dose-repeats 20`; it requires the corresponding completed core outputs. Use the explicit ten-seed command above for the formal analysis rather than relying on the CLI default of 42.
 
 Outputs land in `Results/Knowledge_Assimilation/` (`Dose/`, `DataValue/`, `Propagation/`, `Plasticity/`, `ModelSensitivity/`, `SHAP_Relationships/`, `Audits/`).
 
